@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<SampleBanks>
+	<SampleBank Name="0 Sound Effects" CachePolicy="AnyNoSyncLoad" Medium="Cartridge"/>
+	<SampleBank Reference="0 Sound Effects"/>
+</SampleBanks>
