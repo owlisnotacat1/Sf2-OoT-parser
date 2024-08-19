@@ -73,7 +73,7 @@ def calc_chanbased_tuning(r, s, c, hR, sR):
 # Resulting final tuning value must result in "1 * Float = Note Speed" (e.g. higher float = higher pitch)
 # some brackets are redundant, however math can be a pain sometimes
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** (((r + s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    keybased_tuning = 2 ** ((r + (s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
     return keybased_tuning
 
 def find_closest_index(value, value_list):
@@ -1065,8 +1065,8 @@ class SF2File:
                     
     def process_percussion_set(self):
         for drum in self.processed_percussions:
-            start = drum.lowrange - 21
-            end = drum.maxrange - 21
+            start = drum.lowrange #- 21 # there's no reason to not use MIDI note values...
+            end = drum.maxrange #- 21 # there's no reason to not use MIDI note values...
             index = start
             #print(f"sample: {drum.samplename}")
             while index <= end:
@@ -1084,8 +1084,8 @@ class SF2File:
                 #
                 # Key-based instruments always assume a root is 60, so just subtract the key range from the root
                 # to get the distance from 60 to act as a secondary coarse value...
-                # Unless there's some weird shenanigans that require the "-21", this should result in the proper
-                # tuning float value being calculated...
+                # Unless there's some weird shenanigans that require the "Zelda" note values, this should result
+                # in the proper tuning float value being calculated...
                 pseudorootkey = drum.rootkey - index
                 #print(f"root key: {pseudorootkey}")
                 oot_drum.tuningfloat = calc_keybased_tuning(pseudorootkey,
