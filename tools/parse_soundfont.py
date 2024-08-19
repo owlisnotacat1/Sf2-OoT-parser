@@ -62,18 +62,18 @@ release_values = [
     0.01041733
 ]
 
-# Calculate tuning float for channel-based instruments
+# Calculate tuning float for channel-based, or range-based, instruments (instruments)
 # Resulting final tuning value must result in "1 ÷ Float = Note Speed"
 # some brackets are redundant, however math can be a pain sometimes
 def calc_chanbased_tuning(r, s, c, hR, sR):
     chanbased_tuning = 2 ** ((60 - ((r - s) - (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
     return chanbased_tuning
 
-# Calculate tuning float for key-based instruments
+# Calculate tuning float for key-based instruments (drums and sound effects)
 # Resulting final tuning value must result in "1 * Float = Note Speed"
 # some brackets are redundant, however math can be a pain sometimes
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** ((60 - (s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    keybased_tuning = 2 ** (((r + s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
     return keybased_tuning
 
 def find_closest_index(value, value_list):
@@ -1076,13 +1076,20 @@ class SF2File:
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
                 oot_drum.index = index
-                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
+                oot_drum.release_index = ctypes.c_uint8(find_closest_index(drum.release, release_values)).value # release rates are UNSIGNED integers, not SIGNED integers owl...
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
                 #tuning logic (unneeded)
                 #pseudorootkey = drum.rootkey - 21 - index + 60
+                #
+                # Key-based instruments always assume a root is 60, so just subtract the key range from the root
+                # to get the distance from 60 to act as a secondary coarse value...
+                # Unless there's some weird shenanigans that require the "-21", this should result in the proper
+                # tuning float value being calculated...
+                pseudorootkey = drum.rootkey - index
                 #print(f"root key: {pseudorootkey}")
-                oot_drum.tuningfloat = calc_keybased_tuning(drum.tuning_semi,
+                oot_drum.tuningfloat = calc_keybased_tuning(pseudorootkey,
+                                        drum.tuning_semi,
                                         drum.tuning_cents, 
                                         32000, drum.samplerate)
                 #print(f"tuning: {oot_drum.tuningfloat}")
