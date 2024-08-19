@@ -639,7 +639,7 @@ class SF2File:
                             elif subchunk_lvl1.name == 'ibag':
                                 tmpoffset = subchunk_lvl1.offset + 8
                                 i = 0
-                                while tmpoffset < subchunk_lvl1.offset + subchunk_lvl1.size:
+                                while tmpoffset < subchunk_lvl1.offset + subchunk_lvl1.size + 4:
                                     file.seek(tmpoffset)
                                     data = file.read(4)
                                     ibag_entry = ibag()
