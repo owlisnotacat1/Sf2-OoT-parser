@@ -66,14 +66,14 @@ release_values = [
 # Resulting final tuning value must result in "1 ÷ Float = Note Speed" (e.g. lower float = higher pitch)
 # some brackets are redundant, however math can be a pain sometimes
 def calc_chanbased_tuning(r, s, c, hR, sR):
-    chanbased_tuning = 2 ** ((60 - ((r - s) - (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    chanbased_tuning = 2 ** ((60 - (r - s - (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
     return chanbased_tuning
 
 # Calculate tuning float for key-based instruments (drums and sound effects)
 # Resulting final tuning value must result in "1 * Float = Note Speed" (e.g. higher float = higher pitch)
 # some brackets are redundant, however math can be a pain sometimes
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** ((r + (s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
     return keybased_tuning
 
 def find_closest_index(value, value_list):
