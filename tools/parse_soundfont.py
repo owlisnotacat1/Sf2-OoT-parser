@@ -62,20 +62,22 @@ release_values = [
     0.01041733
 ]
 
-def calculate_frequency(r, T, t):
-    exponent = (60 - (r - T - 0.01 * t)) / 24
-    f = 4 ** exponent
-    return f
+# Calculate tuning float for channel-based instruments
+# Resulting final tuning value must result in "1 ÷ Float = Note Speed"
+# some brackets are redundant, however math can be a pain sometimes
+def calc_chanbased_tuning(r, s, c, hR, sR):
+    chanbased_tuning = 2 ** ((60 - ((r - s) - (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    return chanbased_tuning
 
-def calculate_inst_tuning(r, s, c, hR, sR):
-    exponent = calculate_frequency(r, s, c)
-    sample_rate_correction = sR / hR
-    tuning = exponent * sample_rate_correction
-    return tuning
+# Calculate tuning float for key-based instruments
+# Resulting final tuning value must result in "1 * Float = Note Speed"
+# some brackets are redundant, however math can be a pain sometimes
+def calc_keybased_tuning(r, s, c, hR, sR):
+    keybased_tuning = 2 ** ((60 - (s + (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    return keybased_tuning
 
 def find_closest_index(value, value_list):
     return min(range(len(value_list)), key=lambda i: abs(value_list[i] - value))
-
 
 def convert_pan_to_minus50_50_float(pan_value):
     # Clamp pan_value to the range -500 to 500
@@ -1000,12 +1002,12 @@ class SF2File:
                         oot_inst.enum = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_').upper()}"
                         oot_inst.envelope = curInst.envelope_enum
                         release = find_closest_index(curInst.release, release_values)
-                        oot_inst.releaserate = ctypes.c_int8(release).value
+                        oot_inst.releaserate = ctypes.c_uint8(release).value # release rates are UNSIGNED integers, not SIGNED integers owl...
 
                         # Process samples into OOT format with safety checks
                         if curInst.numsamples == 3:
                             oot_inst.lowkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.lowkey.tuning = calculate_inst_tuning(
+                            oot_inst.lowkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1013,7 +1015,7 @@ class SF2File:
                             )
 
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[1].rootkey,
                                 curInst.sample_entrys[1].tuning_semi,
                                 curInst.sample_entrys[1].tuning_cents,
@@ -1021,7 +1023,7 @@ class SF2File:
                             )
 
                             oot_inst.highKey.sample = f"{curInst.sample_entrys[2].samplename}.aifc"
-                            oot_inst.highKey.tuning = calculate_inst_tuning(
+                            oot_inst.highKey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[2].rootkey,
                                 curInst.sample_entrys[2].tuning_semi,
                                 curInst.sample_entrys[2].tuning_cents,
@@ -1033,7 +1035,7 @@ class SF2File:
 
                         elif curInst.numsamples == 2:
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1042,7 +1044,7 @@ class SF2File:
 
                             if len(curInst.sample_entrys) > 1:
                                 oot_inst.highKey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                                oot_inst.highKey.tuning = calculate_inst_tuning(
+                                oot_inst.highKey.tuning = calc_chanbased_tuning(
                                     curInst.sample_entrys[1].rootkey,
                                     curInst.sample_entrys[1].tuning_semi,
                                     curInst.sample_entrys[1].tuning_cents,
@@ -1052,7 +1054,7 @@ class SF2File:
 
                         elif curInst.numsamples == 1:
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1077,11 +1079,10 @@ class SF2File:
                 oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
-                #tuning logic
-                pseudorootkey = drum.rootkey - 21 - index + 60
+                #tuning logic (unneeded)
+                #pseudorootkey = drum.rootkey - 21 - index + 60
                 #print(f"root key: {pseudorootkey}")
-                oot_drum.tuningfloat = calculate_inst_tuning(pseudorootkey, 
-                                       drum.tuning_semi,
+                oot_drum.tuningfloat = calc_keybased_tuning(drum.tuning_semi,
                                         drum.tuning_cents, 
                                         32000, drum.samplerate)
                 #print(f"tuning: {oot_drum.tuningfloat}")
