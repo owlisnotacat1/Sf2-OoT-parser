@@ -229,6 +229,12 @@ class Envelope:
         self.name = ''
         self.envpoint = []
 
+    def toxml(self, root):
+        envelopeRoot = XmlTree.SubElement(root, "Envelope", {"Name": self.name})
+        script = XmlTree.SubElement(envelopeRoot, "Script")
+        for envpoint in self.envpoint:
+            XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})
+
     def generate_envelope(self, sf2_attack, sf2_hold, sf2_decay, sf2_sustain):
         if sf2_sustain == 100:
             env_delay_1 = round(sf2_attack * 180) or 1
@@ -266,11 +272,13 @@ class Envelope:
             EnvelopePoint(env_delay_4, env_point_4)
         ]
 
-    def toxml(self, root):
-        envelopeRoot = XmlTree.SubElement(root, "Envelope", {"Name": self.name})
-        script = XmlTree.SubElement(envelopeRoot, "Script")
-        for envpoint in self.envpoint:
-            XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})       
+    def compare(self, other_envelope):
+        if len(self.envpoint) != len(other_envelope.envpoint):
+            return False
+        for p1, p2 in zip(self.envpoint, other_envelope.envpoint):
+            if p1.delay != p2.delay or p1.value != p2.value:
+                return False
+        return True
 
 class EnvelopePoint:
     def __init__(self, delay=0, value=0):
@@ -393,7 +401,6 @@ class OotFont:
         self.sfx = []
         self.envelopes = []
 
-
 class PseudoDrumSampleEntry:
     def __init__(self):
         self.samplename = ''
@@ -436,6 +443,7 @@ class PseudoInstrument:
         self.release = 0
         self.numsamples = 0
         self.sample_entrys = []
+        self.envelope_enum = ""
 
 
 #class Percussion:
@@ -516,6 +524,36 @@ class SF2File:
             subchunk.offset = chunk_offset
             
             return subchunk
+        
+    def deduplicate_envelopes(self):
+        seen_envelopes = {}
+        updated_references = {}
+
+        print("Starting envelope deduplication...")
+        for envelope in self.ootfont.envelopes:
+            for seen_name, seen_envelope in seen_envelopes.items():
+                if envelope.compare(seen_envelope):
+                    print(f"Duplicate found: {envelope.name} is a duplicate of {seen_name}")
+                    updated_references[envelope.name] = seen_name
+                    break
+            else:
+                seen_envelopes[envelope.name] = envelope
+
+        # Update references in processed_insts and processed_percussions
+        for instrument in self.processed_insts:
+            if instrument.envelope_enum in updated_references:
+                print(f"Updating instrument {instrument.name} envelope_enum from {instrument.envelope_enum} to {updated_references[instrument.envelope_enum]}")
+                instrument.envelope_enum = updated_references[instrument.envelope_enum]
+
+        for drum in self.processed_percussions:
+            if drum.envelope_enum in updated_references:
+                print(f"envelope_enum from {drum.envelope_enum} to {updated_references[drum.envelope_enum]}")
+                drum.envelope_enum = updated_references[drum.envelope_enum]
+
+        # Remove duplicate envelopes
+        original_count = len(self.ootfont.envelopes)
+        self.ootfont.envelopes = [envelope for envelope in self.ootfont.envelopes if envelope.name not in updated_references]
+        print(f"Deduplication completed. Removed {original_count - len(self.ootfont.envelopes)} duplicates.")
 
     def parse(self):
         # Open the file
@@ -1113,6 +1151,7 @@ class SF2File:
 
     def process_oot_font(self):
         self.process_oot_envelopes()
+        self.deduplicate_envelopes()
         self.process_oot_instruments()
         self.process_percussion_set()
 
