@@ -1222,24 +1222,37 @@ class SF2File:
         # Ensure the output directory exists
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
-        all_samples = []  # To store all sample names
+
+        sample_name_count = {}  # Dictionary to track sample name occurrences
+        name_mapping = {}  # Map original names to unique names
 
         # Open the SF2 file to read sample data
         with open(self.filepath, 'rb') as sf2_file:
             for shdr_entry in self.shdrs:
                 if shdr_entry.name == "EOS":  # Skip the terminal "EOS" entry
                     continue
-                
+
+                # Generate a unique sample name
+                base_name = shdr_entry.name
+                if base_name in sample_name_count:
+                    sample_name_count[base_name] += 1
+                    unique_name = f"{base_name}_{sample_name_count[base_name]}"
+                else:
+                    sample_name_count[base_name] = 0
+                    unique_name = base_name
+
+                # Store the mapping from the original name to the unique name
+                name_mapping[shdr_entry.name] = unique_name
+
                 # Calculate the size of the sample
                 sample_size = (shdr_entry.end - shdr_entry.start) * 2  # Since samples are 16-bit (2 bytes)
 
                 # Seek to the start of the sample data
                 sf2_file.seek(shdr_entry.start * 2)
-                
+
                 # Read the sample data
                 sample_data = sf2_file.read(sample_size)
-                
+
                 # Calculate loop points
                 loop_start = shdr_entry.startloop - shdr_entry.start
                 loop_end = shdr_entry.endloop - shdr_entry.start
@@ -1253,14 +1266,30 @@ class SF2File:
                     loop_end = None
 
                 # Convert the sample data into WAV format with loop points
-                wav_file_path = os.path.join(output_dir, f"{shdr_entry.name}.wav")
+                wav_file_path = os.path.join(output_dir, f"{unique_name}.wav")
                 self.write_wav_file(wav_file_path, sample_data, shdr_entry.samplerate,
                                     loop_start, loop_end)
-                
-                print(f"Extracted: {wav_file_path}")
-                all_samples.append(shdr_entry.name)
 
-        return all_samples
+                print(f"Extracted: {wav_file_path}")
+
+        return name_mapping  # Return the mapping to be used in instruments and drums
+
+    def update_sample_names_in_instruments_and_drums(self, name_mapping):
+        # Update sample names in instruments
+        for instrument in self.processed_insts:
+            for sample_entry in instrument.sample_entrys:
+                original_name = sample_entry.samplename
+                if original_name in name_mapping:
+                    print(f"Updating instrument sample name from {original_name} to {name_mapping[original_name]}")
+                    sample_entry.samplename = name_mapping[original_name]
+
+        # Update sample names in drums
+        for drum in self.processed_percussions:
+            original_name = drum.samplename
+            if original_name in name_mapping:
+                print(f"Updating drum sample name from {original_name} to {name_mapping[original_name]}")
+                drum.samplename = name_mapping[original_name]
+
 
     def write_wav_file(self, filepath, sample_data, sample_rate, loop_start=None, loop_end=None):
         # WAV file settings
@@ -1470,19 +1499,24 @@ def process_sf2_file(sf2_file, output_file):
     sf2 = SF2File(sf2_file)
     sf2.parse()
 
+    # Process instruments and drums
     sf2.process_instruments()
     drumInstId = sf2.get_instrument_index_for_drum()
-    #sf2.print_presets_and_instruments()
-
     sf2.process_drums()
+
+    # Extract samples and get the mapping of original to unique names
+    output_dir = os.path.join(os.path.dirname(sf2_file), "Samples")
+    name_mapping = sf2.extract_samples(output_dir)
+    
+    # Update instruments and drums with unique sample names
+    sf2.update_sample_names_in_instruments_and_drums(name_mapping)
+    
+    # Process OOT font and generate XML
     sf2.process_oot_font()
     sf2.generate_xml(output_file)
     
-    # Extract samples to "Samples" directory
-    output_dir = os.path.join(os.path.dirname(sf2_file), "Samples")
-    sf2.extract_samples(output_dir)
+    # Cleanup unassociated samples
     sf2.delete_unassociated_samples(output_dir)
-    #sf2.remove_short_loops(output_dir)
 
 def main():
     if len(sys.argv) != 3:
