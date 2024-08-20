@@ -221,10 +221,19 @@ class RiffChunk:
         self.type = ''
         self.subchunks = []
 
+def db_to_linear(dB):
+    return 10 ** (-dB / 20)
+
 class Envelope:
     def __init__(self):
         self.name = ''
         self.envpoint = []
+
+    def toxml(self, root):
+        envelopeRoot = XmlTree.SubElement(root, "Envelope", {"Name": self.name})
+        script = XmlTree.SubElement(envelopeRoot, "Script")
+        for envpoint in self.envpoint:
+            XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})
 
     def generate_envelope(self, sf2_attack, sf2_hold, sf2_decay, sf2_sustain):
         if sf2_sustain == 100:
@@ -244,8 +253,8 @@ class Envelope:
                 env_delay_2 = round(sf2_hold * 180 / 2.2) or 1
                 env_point_2 = 32767
                 env_delay_3 = round(sf2_decay * 180 / 2.2) or 1
-                sustainPercentage = (100 - sf2_sustain) / 100
-                env_point_3 = round((math.sqrt(sustainPercentage)) * 32767)
+                #sustainPercentage = (144 - sf2_sustain) / 100
+                env_point_3 = round((math.sqrt(db_to_linear(sf2_sustain))) * 32767)
                 env_delay_4 = "ADSR_HANG"
                 env_point_4 = 0
             else:
@@ -263,11 +272,13 @@ class Envelope:
             EnvelopePoint(env_delay_4, env_point_4)
         ]
 
-    def toxml(self, root):
-        envelopeRoot = XmlTree.SubElement(root, "Envelope", {"Name": self.name})
-        script = XmlTree.SubElement(envelopeRoot, "Script")
-        for envpoint in self.envpoint:
-            XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})       
+    def compare(self, other_envelope):
+        if len(self.envpoint) != len(other_envelope.envpoint):
+            return False
+        for p1, p2 in zip(self.envpoint, other_envelope.envpoint):
+            if p1.delay != p2.delay or p1.value != p2.value:
+                return False
+        return True
 
 class EnvelopePoint:
     def __init__(self, delay=0, value=0):
@@ -390,7 +401,6 @@ class OotFont:
         self.sfx = []
         self.envelopes = []
 
-
 class PseudoDrumSampleEntry:
     def __init__(self):
         self.samplename = ''
@@ -433,6 +443,7 @@ class PseudoInstrument:
         self.release = 0
         self.numsamples = 0
         self.sample_entrys = []
+        self.envelope_enum = ""
 
 
 #class Percussion:
@@ -513,6 +524,36 @@ class SF2File:
             subchunk.offset = chunk_offset
             
             return subchunk
+        
+    def deduplicate_envelopes(self):
+        seen_envelopes = {}
+        updated_references = {}
+
+        print("Starting envelope deduplication...")
+        for envelope in self.ootfont.envelopes:
+            for seen_name, seen_envelope in seen_envelopes.items():
+                if envelope.compare(seen_envelope):
+                    print(f"Duplicate found: {envelope.name} is a duplicate of {seen_name}")
+                    updated_references[envelope.name] = seen_name
+                    break
+            else:
+                seen_envelopes[envelope.name] = envelope
+
+        # Update references in processed_insts and processed_percussions
+        for instrument in self.processed_insts:
+            if instrument.envelope_enum in updated_references:
+                print(f"Updating instrument {instrument.name} envelope_enum from {instrument.envelope_enum} to {updated_references[instrument.envelope_enum]}")
+                instrument.envelope_enum = updated_references[instrument.envelope_enum]
+
+        for drum in self.processed_percussions:
+            if drum.envelope_enum in updated_references:
+                print(f"envelope_enum from {drum.envelope_enum} to {updated_references[drum.envelope_enum]}")
+                drum.envelope_enum = updated_references[drum.envelope_enum]
+
+        # Remove duplicate envelopes
+        original_count = len(self.ootfont.envelopes)
+        self.ootfont.envelopes = [envelope for envelope in self.ootfont.envelopes if envelope.name not in updated_references]
+        print(f"Deduplication completed. Removed {original_count - len(self.ootfont.envelopes)} duplicates.")
 
     def parse(self):
         # Open the file
@@ -563,7 +604,7 @@ class SF2File:
                             # Process data in phdr chunk
                             if subchunk_lvl1.name == 'phdr':
                                 tmpoffset = subchunk_lvl1.offset + 8  # Move past 'phdr' ID and size
-                                while tmpoffset < subchunk_lvl1.offset + subchunk_lvl1.size + 38: # - 38 is to ignore the dummy phdr segment which is the end of the list
+                                while tmpoffset < subchunk_lvl1.offset + subchunk_lvl1.size - 38: # - 38 is to ignore the dummy phdr segment which is the end of the list
                                     file.seek(tmpoffset)
 
                                     # Read 38 bytes for the phdr structure
@@ -588,6 +629,7 @@ class SF2File:
                                     tmpoffset += 38  # Size of phdr structure
                                     self.numphdr += 1
                                     self.presetheaders.append(presetheader)
+                                    print(f"preset header name: {presetheader.achPresetName}")
 
                             elif subchunk_lvl1.name == 'pbag':
                                 tmpoffset = subchunk_lvl1.offset + 8
@@ -635,6 +677,7 @@ class SF2File:
                                     i += 1
                                     self.numinst += 1
                                     self.insts.append(inst_entry)
+                                    print(f"inst name: {inst_entry.name}, Bag index: {inst_entry.wInstBagNdx}")
 
                             elif subchunk_lvl1.name == 'ibag':
                                 tmpoffset = subchunk_lvl1.offset + 8
@@ -718,9 +761,19 @@ class SF2File:
         # Iterate through each instrument
         instindex = 0
         for inst_entry in self.insts:
+            # Check for invalid names and handle accordingly
+            if not inst_entry.name.strip():
+                print(f"Warning: Empty or invalid instrument name at index {instindex}")
+                continue
+
             # Create an Instrument object
             instrument = PseudoInstrument()
             instrument.name = inst_entry.name.strip()  # Store the instrument name
+
+            # Validate the instrument name
+            if "pbag" in instrument.name.lower():
+                print(f"Error: Detected invalid instrument name resembling 'pbag': {instrument.name}")
+                continue
 
             # Gather all ibag entries associated with this instrument
             ibag_start_index = inst_entry.wInstBagNdx
@@ -755,11 +808,11 @@ class SF2File:
                     else:
                         if sample_entry is None:
                             sample_entry = PseudoInstrumentSampleEntry()
-                            #should only be called when global chunk is processed
+                            # should only be called when global chunk is processed
 
                         if igen_entry.operator == 'keyrange':
                             if sample_entry.keyrangehigh != 127:
-                                print("what the fuck")
+                                print("Key range high is not 127. This might indicate an issue.")
                             sample_entry.keyrangelow = igen_entry.amount & 0xFF
                             sample_entry.keyrangehigh = (igen_entry.amount >> 8) & 0xFF
                         elif igen_entry.operator == 'attack':
@@ -810,7 +863,8 @@ class SF2File:
         if self.drumindex is not None:
             for inst_entry in self.insts:
                 if inst_entry.index == self.drumindex:
-                    # Logic for parsing
+                    print(f"Processing drums for instrument index: {self.drumindex}")
+
                     ibag_start_index = inst_entry.wInstBagNdx
                     ibag_end_index = self.numibag if inst_entry.index + 1 >= len(self.insts) else self.insts[inst_entry.index + 1].wInstBagNdx
 
@@ -837,8 +891,7 @@ class SF2File:
                                 global_params[igen_entry.operator] = igen_entry.amount
                             else:
                                 if drum is None:
-                                    drum = PseudoDrumSampleEntry()
-                                    self.processed_percussions.append(drum)
+                                    drum = PseudoDrumSampleEntry()  # Initialize a new drum entry
 
                                 if igen_entry.operator == 'keyrange':
                                     drum.lowrange = igen_entry.amount & 0xFF
@@ -869,6 +922,11 @@ class SF2File:
                                         drum.samplename = self.shdrs[sample_index].name
                                         drum.samplerate = self.shdrs[sample_index].samplerate
 
+                        # If a drum entry was created and processed, append it to the list
+                        if drum is not None:
+                            self.processed_percussions.append(drum)
+                            print(f"Drum processed: {drum.samplename} with range {drum.lowrange}-{drum.maxrange}")
+
                         # Apply global parameters if specific ones are missing
                         if drum:
                             if 'attack' not in globals() and 'attack' in global_params:
@@ -882,55 +940,56 @@ class SF2File:
                             if 'release' not in globals() and 'release' in global_params:
                                 drum.release = convert_timecent_to_seconds(global_params['release'])
 
-                    self.numdrums += 1
+                        self.numdrums += 1
 
 
 
     def get_instrument_index_for_drum(self):
         # Find the preset with wPreset value 127 (typically drum kit)
         for presetheader in self.presetheaders:
+            print(f"Checking preset: {presetheader.achPresetName} (Preset: {presetheader.wPreset})")
             if presetheader.wPreset == 127:
+                print(f"Found percussion preset: {presetheader.achPresetName} (Preset: {presetheader.wPreset})")
                 tmp_pbag_start = presetheader.wPresetBagNdx
-    
+
                 # Check if there is another preset after this one to determine the range
                 next_preset_index = self.presetheaders.index(presetheader) + 1
                 if next_preset_index < len(self.presetheaders):
                     tmp_pbag_end = self.presetheaders[next_preset_index].wPresetBagNdx
                 else:
                     tmp_pbag_end = len(self.pbags)
-    
+
                 # Iterate through the pbag associated with this preset
                 for pbag_index in range(tmp_pbag_start, tmp_pbag_end):
                     if pbag_index >= len(self.pbags):
                         continue
-                    
+
                     pbag_entry = self.pbags[pbag_index]
                     tmp_pgen_start = pbag_entry.wGenNdx
-    
-                    # Debugging: Print the tmp_pgen_start and length of pgens
-                    #print(f"tmp_pgen_start: {tmp_pgen_start}, len(self.pgens): {len(self.pgens)}")
-    
-                    # Safeguard against out-of-range indices and check for off-by-one error
-                    if 0 <= tmp_pgen_start < len(self.pgens):
-                        pgen_entry = self.pgens[tmp_pgen_start]
-                    elif 0 <= tmp_pgen_start - 1 < len(self.pgens):  # Check for off-by-one
-                        #print(f"Adjusting for potential off-by-one error. Trying index {tmp_pgen_start - 1}.")
-                        pgen_entry = self.pgens[tmp_pgen_start - 1]
-                    else:
-                        #print(f"Error: tmp_pgen_start {tmp_pgen_start} is out of range.")
-                        continue
-                    
-                    # Print the pgen entry's details for debugging
-                    #print(f"pgen_index: {tmp_pgen_start}, operator: {pgen_entry.operator}, amount: {pgen_entry.amount}")
-    
-                    # Check if the pgen entry has the operator "instrument index"
-                    if pgen_entry.operator == 'instrument index':
-                        self.drumindex = pgen_entry.amount
-                        return pgen_entry.amount
-    
+                    tmp_pgen_end = len(self.pgens)
+
+                    if pbag_index + 1 < len(self.pbags):
+                        tmp_pgen_end = self.pbags[pbag_index + 1].wGenNdx
+
+                    # Iterate through all pgen entries within this pbag
+                    for pgen_index in range(tmp_pgen_start, tmp_pgen_end):
+                        if pgen_index >= len(self.pgens):
+                            continue
+
+                        pgen_entry = self.pgens[pgen_index]
+                        print(f"Inspecting pgen entry: Operator = {pgen_entry.operator}, Amount = {pgen_entry.amount}")
+
+                        # Check if the pgen entry has the operator "instrument index"
+                        if pgen_entry.operator == 'instrument index':
+                            print(f"Drum instrument index found: {pgen_entry.amount}")
+                            self.drumindex = pgen_entry.amount
+                            return pgen_entry.amount
+
         print("No 'instrument index' found for the drum preset.")
         self.drumindex = None
-        return None  # If no "instrument index" pgen_entry is found
+        return None
+
+
 
 
 
@@ -1096,14 +1155,15 @@ class SF2File:
 
     def process_oot_font(self):
         self.process_oot_envelopes()
+        self.deduplicate_envelopes()
         self.process_oot_instruments()
         self.process_percussion_set()
 
-        for oot_inst in self.ootfont.instruments:
-            oot_inst.display()
-        if self.drumindex is not None:
-            for oot_drum in self.ootfont.drums:
-                oot_drum.display()
+        #for oot_inst in self.ootfont.instruments:
+        #    oot_inst.display()
+        #if self.drumindex is not None:
+        #    for oot_drum in self.ootfont.drums:
+        #        oot_drum.display()
 
     def generate_xml(self, output_file):
         root = XmlTree.Element("Soundfont", {
@@ -1166,30 +1226,43 @@ class SF2File:
         # Ensure the output directory exists
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
-        all_samples = []  # To store all sample names
+
+        sample_name_count = {}  # Dictionary to track sample name occurrences
+        name_mapping = {}  # Map original names to unique names
 
         # Open the SF2 file to read sample data
         with open(self.filepath, 'rb') as sf2_file:
             for shdr_entry in self.shdrs:
                 if shdr_entry.name == "EOS":  # Skip the terminal "EOS" entry
                     continue
-                
+
+                # Generate a unique sample name
+                base_name = shdr_entry.name
+                if base_name in sample_name_count:
+                    sample_name_count[base_name] += 1
+                    unique_name = f"{base_name}_{sample_name_count[base_name]}"
+                else:
+                    sample_name_count[base_name] = 0
+                    unique_name = base_name
+
+                # Store the mapping from the original name to the unique name
+                name_mapping[shdr_entry.name] = unique_name
+
                 # Calculate the size of the sample
                 sample_size = (shdr_entry.end - shdr_entry.start) * 2  # Since samples are 16-bit (2 bytes)
 
                 # Seek to the start of the sample data
                 sf2_file.seek(shdr_entry.start * 2)
-                
+
                 # Read the sample data
                 sample_data = sf2_file.read(sample_size)
-                
+
                 # Calculate loop points
                 loop_start = shdr_entry.startloop - shdr_entry.start
                 loop_end = shdr_entry.endloop - shdr_entry.start
 
                 # Validate loop points
-                if loop_start < 0 or loop_end < 0 or loop_start >= loop_end or loop_start == loop_end:
+                if loop_start <= 1 or loop_end < 0 or loop_start >= loop_end or loop_start == loop_end:
                     loop_start = None
                     loop_end = None
                 elif loop_start == 0 and loop_end == shdr_entry.end - shdr_entry.start:
@@ -1197,14 +1270,30 @@ class SF2File:
                     loop_end = None
 
                 # Convert the sample data into WAV format with loop points
-                wav_file_path = os.path.join(output_dir, f"{shdr_entry.name}.wav")
+                wav_file_path = os.path.join(output_dir, f"{unique_name}.wav")
                 self.write_wav_file(wav_file_path, sample_data, shdr_entry.samplerate,
                                     loop_start, loop_end)
-                
-                print(f"Extracted: {wav_file_path}")
-                all_samples.append(shdr_entry.name)
 
-        return all_samples
+                print(f"Extracted: {wav_file_path}")
+
+        return name_mapping  # Return the mapping to be used in instruments and drums
+
+    def update_sample_names_in_instruments_and_drums(self, name_mapping):
+        # Update sample names in instruments
+        for instrument in self.processed_insts:
+            for sample_entry in instrument.sample_entrys:
+                original_name = sample_entry.samplename
+                if original_name in name_mapping:
+                    print(f"Updating instrument sample name from {original_name} to {name_mapping[original_name]}")
+                    sample_entry.samplename = name_mapping[original_name]
+
+        # Update sample names in drums
+        for drum in self.processed_percussions:
+            original_name = drum.samplename
+            if original_name in name_mapping:
+                print(f"Updating drum sample name from {original_name} to {name_mapping[original_name]}")
+                drum.samplename = name_mapping[original_name]
+
 
     def write_wav_file(self, filepath, sample_data, sample_rate, loop_start=None, loop_end=None):
         # WAV file settings
@@ -1331,6 +1420,70 @@ class SF2File:
                     os.remove(file_path)
                     print(f"Deleted unassociated sample: {file_name}")
 
+    def print_presets_and_instruments(sf2):
+        print("Presets and their linked instruments:")
+        for presetheader in sf2.presetheaders:
+            print(f"\nPreset Name: {presetheader.achPresetName}")
+            print(f"  Preset Index: {presetheader.wPreset}")
+            print(f"  Bank: {presetheader.wBank}")
+            print(f"  Preset Bag Index: {presetheader.wPresetBagNdx}")
+            print("  Linked Instruments:")
+
+            tmp_pbag_start = presetheader.wPresetBagNdx
+            next_preset_index = sf2.presetheaders.index(presetheader) + 1
+            if next_preset_index < len(sf2.presetheaders):
+                tmp_pbag_end = sf2.presetheaders[next_preset_index].wPresetBagNdx
+            else:
+                tmp_pbag_end = len(sf2.pbags)
+
+            for pbag_index in range(tmp_pbag_start, tmp_pbag_end):
+                if pbag_index >= len(sf2.pbags):
+                    continue
+
+                pbag_entry = sf2.pbags[pbag_index]
+                tmp_pgen_start = pbag_entry.wGenNdx
+                tmp_pgen_end = len(sf2.pgens)
+
+                if pbag_index + 1 < len(sf2.pbags):
+                    tmp_pgen_end = sf2.pbags[pbag_index + 1].wGenNdx
+
+                for pgen_index in range(tmp_pgen_start, tmp_pgen_end):
+                    pgen_entry = sf2.pgens[pgen_index]
+
+                    if pgen_entry.operator == 'instrument index':
+                        instIndex = pgen_entry.amount
+                        if instIndex < len(sf2.insts):
+                            inst_entry = sf2.insts[instIndex]
+                            print(f"    Instrument Name: {inst_entry.name}")
+                            print(f"    Instrument Index: {inst_entry.index}")
+                            print(f"    Instrument Bag Index: {inst_entry.wInstBagNdx}")
+                            sf2.print_instrument_details(instIndex)
+                        else:
+                            print(f"    Instrument Index {instIndex} is out of range.")
+                        break
+
+    def print_instrument_details(self, instIndex):
+        if instIndex >= len(self.processed_insts):
+            print(f"    Error: Instrument Index {instIndex} out of range.")
+            return
+
+        instrument = self.processed_insts[instIndex]
+        print(f"    Attack: {instrument.attack}")
+        print(f"    Hold: {instrument.hold}")
+        print(f"    Decay: {instrument.decay}")
+        print(f"    Sustain: {instrument.sustain}")
+        print(f"    Release: {instrument.release}")
+        print(f"    Number of Samples: {instrument.numsamples}")
+        print(f"    Sample Entries:")
+        for sample_entry in instrument.sample_entrys:
+            print(f"      Sample Name: {sample_entry.samplename}")
+            print(f"      Key Range: {sample_entry.keyrangelow} - {sample_entry.keyrangehigh}")
+            print(f"      Root Key: {sample_entry.rootkey}")
+            print(f"      Tuning (Semi): {sample_entry.tuning_semi}")
+            print(f"      Tuning (Cents): {sample_entry.tuning_cents}")
+            print(f"      Sample Rate: {sample_entry.samplerate}")
+            print(f"      Loop Type: {sample_entry.loopType}")
+
 def create_xml_structure(output_file):
     # Create the root element
     root = XmlTree.Element("Soundfont")
@@ -1350,18 +1503,24 @@ def process_sf2_file(sf2_file, output_file):
     sf2 = SF2File(sf2_file)
     sf2.parse()
 
+    # Process instruments and drums
     sf2.process_instruments()
     drumInstId = sf2.get_instrument_index_for_drum()
-
     sf2.process_drums()
+
+    # Extract samples and get the mapping of original to unique names
+    output_dir = os.path.join(os.path.dirname(sf2_file), "Samples")
+    name_mapping = sf2.extract_samples(output_dir)
+    
+    # Update instruments and drums with unique sample names
+    sf2.update_sample_names_in_instruments_and_drums(name_mapping)
+    
+    # Process OOT font and generate XML
     sf2.process_oot_font()
     sf2.generate_xml(output_file)
     
-    # Extract samples to "Samples" directory
-    output_dir = os.path.join(os.path.dirname(sf2_file), "Samples")
-    sf2.extract_samples(output_dir)
+    # Cleanup unassociated samples
     sf2.delete_unassociated_samples(output_dir)
-    #sf2.remove_short_loops(output_dir)
 
 def main():
     if len(sys.argv) != 3:
