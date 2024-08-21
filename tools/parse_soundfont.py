@@ -224,6 +224,9 @@ class RiffChunk:
 def db_to_linear(dB):
     return 10 ** (-dB / 20)
 
+def clamp(value, min_value=1, max_value=32767):
+    return max(min_value, min(value, max_value))
+
 class Envelope:
     def __init__(self):
         self.name = ''
@@ -236,25 +239,26 @@ class Envelope:
             XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})
 
     def generate_envelope(self, sf2_attack, sf2_hold, sf2_decay, sf2_sustain):
+        # Ensure sustain is in the correct range (0-100) for the calculations
         if sf2_sustain == 100:
-            env_delay_1 = round(sf2_attack * 180) or 1
+            env_delay_1 = clamp(round(sf2_attack * 180))
             env_point_1 = 32767
-            env_delay_2 = round(sf2_hold * 180 / 2.2) or 1
+            env_delay_2 = clamp(round(sf2_hold * 180 / 2.2))
             env_point_2 = 32767
-            env_delay_3 = round(sf2_decay * 180 / 2.2) or 1
+            env_delay_3 = clamp(round(sf2_decay * 180 / 2.2))
             env_point_3 = 1
             env_delay_4 = "ADSR_HANG"
             env_point_4 = 0
         else:
-            env_delay_1 = round(sf2_attack * 180) or 1
+            env_delay_1 = clamp(round(sf2_attack * 180))
             env_point_1 = 32767
 
             if sf2_sustain != 0:
-                env_delay_2 = round(sf2_hold * 180 / 2.2) or 1
+                env_delay_2 = clamp(round(sf2_hold * 180 / 2.2))
                 env_point_2 = 32767
-                env_delay_3 = round(sf2_decay * 180 / 2.2) or 1
-                #sustainPercentage = (144 - sf2_sustain) / 100
-                env_point_3 = round((math.sqrt(db_to_linear(sf2_sustain))) * 32767)
+                env_delay_3 = clamp(round(sf2_decay * 180 / 2.2))
+                # Convert sustain dB value to linear and calculate the envelope point
+                env_point_3 = round(math.sqrt(db_to_linear(sf2_sustain)) * 32767)
                 env_delay_4 = "ADSR_HANG"
                 env_point_4 = 0
             else:
@@ -265,6 +269,7 @@ class Envelope:
                 env_delay_4 = 0
                 env_point_4 = 0
 
+        # Assign calculated envelope points to the envpoint list
         self.envpoint = [
             EnvelopePoint(env_delay_1, env_point_1),
             EnvelopePoint(env_delay_2, env_point_2),
@@ -995,8 +1000,6 @@ class SF2File:
 
     def process_oot_envelopes(self):
         for instrument in self.processed_insts:
-            if instrument.index == self.drumindex:
-                continue
             if instrument.name == "EOI":
                 continue
             envelope_entry = Envelope()
