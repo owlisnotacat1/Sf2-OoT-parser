@@ -7,60 +7,32 @@ import ctypes
 from xml.dom import minidom
 import wave
 
-release_values = [
-    0.00000000, 55.00352023, 52.50336022, 50.00320020, 47.50304019,
-    45.00288018, 42.50272017, 40.00256016, 37.50240015, 35.00224014,
-    32.50208013, 30.00192012, 27.50176011, 25.00160010, 22.50144009,
-    20.00128008, 21.16802142, 21.00134409, 20.83466675, 20.66798942,
-    20.50131208, 20.33463475, 20.16795742, 20.00128008, 19.83460275,
-    19.66792541, 19.50124808, 19.33457075, 19.16789341, 19.00121608,
-    18.83453874, 18.66786141, 18.50118408, 18.33450674, 18.16782941,
-    18.00115207, 17.83447474, 17.66779741, 17.50112007, 17.33444274,
-    17.16776540, 17.00108807, 16.83441074, 16.66773340, 16.50105607,
-    16.33437873, 16.16770140, 16.00102407, 15.83434673, 15.66766940,
-    15.50099206, 15.33431473, 15.16763740, 15.00096006, 14.83428273,
-    14.66760539, 14.50092806, 14.33425073, 14.16757339, 14.00089606,
-    13.83421872, 13.66754139, 13.50086406, 13.33418672, 13.16750939,
-    13.00083205, 12.83415472, 12.66747739, 12.50080005, 12.33412272,
-    12.16744538, 12.00076805, 11.83409072, 11.66741338, 11.50073605,
-    11.33405871, 11.16738138, 11.00070405, 10.83402671, 10.66734938,
-    10.50067204, 10.33399471, 10.16731737, 10.00064004, 9.83396271,
-    9.66728537, 9.50060804, 9.33393070, 9.16725337, 9.00057604,
-    8.83389870, 8.66722137, 8.50054403, 8.33386670, 8.16718937,
-    8.00051203, 7.83383470, 7.66715736, 7.50048003, 7.33380270,
-    7.16712536, 7.00044803, 6.83377069, 6.66709336, 6.50041603,
-    6.33373869, 6.16706136, 6.00038402, 5.83370669, 5.66702936,
-    5.50035202, 5.33367469, 5.16699735, 5.00032002, 4.83364269,
-    4.66696535, 4.50028802, 4.33361068, 4.16693335, 4.00025602,
-    3.83357868, 3.66690135, 3.50022401, 3.33354668, 3.16686935,
-    3.00019201, 2.83351468, 2.66683734, 5.12532802, 5.08365869,
-    5.04198935, 5.00032002, 4.95865069, 4.91698135, 4.87531202,
-    4.83364269, 4.79197335, 4.75030402, 4.70863469, 4.66696535,
-    4.62529602, 4.58362669, 4.54195735, 4.50028802, 4.45861868,
-    4.41694935, 4.37528002, 4.33361068, 4.29194135, 4.25027202,
-    4.20860268, 4.16693335, 4.12526402, 4.08359468, 4.04192535,
-    4.00025602, 3.95858668, 3.91691735, 3.87524802, 3.83357868,
-    3.79190935, 3.75024002, 3.70857068, 3.66690135, 3.62523201,
-    3.58356268, 3.54189335, 3.50022401, 3.45855468, 3.41688535,
-    3.37521601, 3.33354668, 3.29187735, 3.25020801, 3.20853868,
-    3.16686935, 3.12520001, 3.08353068, 3.04186135, 3.00019201,
-    2.95852268, 2.91685335, 2.87518401, 2.83351468, 2.79184534,
-    2.75017601, 2.70850668, 2.66683734, 2.62516801, 2.58349868,
-    2.54182934, 2.50016001, 2.45849068, 2.41682134, 2.37515201,
-    2.33348268, 2.29181334, 2.25014401, 2.20847468, 2.16680534,
-    2.12513601, 2.08346668, 2.04179734, 2.00012801, 1.95845867,
-    1.91678934, 1.87512001, 1.83345067, 1.79178134, 1.75011201,
-    1.70844267, 1.66677334, 1.62510401, 1.58343467, 1.54176534,
-    1.50009601, 1.45842667, 1.41675734, 1.37508801, 1.33341867,
-    1.29174934, 1.25008001, 1.20841067, 1.16674134, 1.12507200,
-    1.08340267, 1.04173334, 1.00006400, 0.95839467, 0.91672534,
-    0.87505600, 0.83338667, 0.79171734, 0.75004800, 0.70837867,
-    0.66670934, 0.62504000, 0.58337067, 0.54170134, 0.50003200,
-    0.45836267, 0.41669334, 0.37502400, 0.33335467, 0.29168533,
-    0.25001600, 0.20834667, 0.16667733, 0.12500800, 0.08333867,
-    0.04166933, 0.03125200, 0.02750176, 0.02083467, 0.01375088,
-    0.01041733
-]
+updatesPerFrameScaled = 0.75
+#initalize table
+release_values = [0.0] * 256
+
+def calculate_decay(arg):
+    return (256.0 * 0.001302) / arg
+
+# the "* 0.7" is because at lower amplitudes ingame the
+# audio just goes silent from what ive noticed 
+# so this is the closes that i could get to sf2
+def AudioHeap_InitAdsrDecayTable():
+    release_values[0] = 0.0
+
+    for i in range(1, 16):
+        release_values[i] = 1.0 / calculate_decay(60 * (23 - i)) / 60  * 0.7
+    for i in range(16, 128):
+        release_values[i] = 1.0 / calculate_decay(4 * (143 - i)) / 60 * 0.7
+    for i in range(128, 251):
+        release_values[i] = 1.0 / calculate_decay(251 - i) / 60 * 0.7
+    release_values[251] = 1.0 / calculate_decay(0.75) / 60 * 0.7
+    release_values[252] = 1.0 / calculate_decay(0.66) / 60 * 0.7
+    release_values[253] = 1.0 / calculate_decay(0.5) / 60 * 0.7
+    release_values[254] = 1.0 / calculate_decay(0.33) / 60 * 0.7
+    release_values[255] = 1.0 / calculate_decay(0.25) / 60 * 0.7
+    
+
 
 def calculate_frequency(r, T, t):
     exponent = (60 - (r - T - 0.01 * t)) / 24
@@ -239,26 +211,25 @@ class Envelope:
             XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})
 
     def generate_envelope(self, sf2_attack, sf2_hold, sf2_decay, sf2_sustain):
-        # Ensure sustain is in the correct range (0-100) for the calculations
         if sf2_sustain == 100:
-            env_delay_1 = clamp(round(sf2_attack * 180))
+            env_delay_1 = clamp(round(sf2_attack * (60 / updatesPerFrameScaled) * 2))
             env_point_1 = 32767
-            env_delay_2 = clamp(round(sf2_hold * 180 / 2.2))
+            env_delay_2 = clamp(round(sf2_hold * (60 / updatesPerFrameScaled) * 2))
             env_point_2 = 32767
-            env_delay_3 = clamp(round(sf2_decay * 180 / 2.2))
+            env_delay_3 = clamp(round(sf2_decay * (60 / updatesPerFrameScaled) * 2))
             env_point_3 = 1
             env_delay_4 = "ADSR_HANG"
             env_point_4 = 0
         else:
-            env_delay_1 = clamp(round(sf2_attack * 180))
+            env_delay_1 = clamp(round(sf2_attack * (60 / updatesPerFrameScaled) * 2))
             env_point_1 = 32767
 
             if sf2_sustain != 0:
-                env_delay_2 = clamp(round(sf2_hold * 180 / 2.2))
+                env_delay_2 = clamp(round(sf2_hold * (60 / updatesPerFrameScaled) * 2))
                 env_point_2 = 32767
-                env_delay_3 = clamp(round(sf2_decay * 180 / 2.2))
+                env_delay_3 = clamp(round(sf2_decay * (60 / updatesPerFrameScaled) * 2))
                 # Convert sustain dB value to linear and calculate the envelope point
-                env_point_3 = round(math.sqrt(db_to_linear(sf2_sustain)) * 32767)
+                env_point_3 = round(math.sqrt(db_to_linear(sf2_sustain / 2)) * 32767)
                 env_delay_4 = "ADSR_HANG"
                 env_point_4 = 0
             else:
@@ -1061,7 +1032,7 @@ class SF2File:
                         oot_inst.name = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_')}"
                         oot_inst.enum = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_').upper()}"
                         oot_inst.envelope = curInst.envelope_enum
-                        release = find_closest_index(curInst.release / 2, release_values)
+                        release = find_closest_index(curInst.release, release_values)
                         oot_inst.releaserate = ctypes.c_int8(release).value
 
                         # Process samples into OOT format with safety checks
@@ -1125,8 +1096,8 @@ class SF2File:
                     
     def process_percussion_set(self):
         for drum in self.processed_percussions:
-            start = drum.lowrange - 21
-            end = drum.maxrange - 21
+            start = drum.lowrange - 9
+            end = drum.maxrange - 9
             index = start
             #print(f"sample: {drum.samplename}")
             while index <= end:
@@ -1136,11 +1107,11 @@ class SF2File:
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
                 oot_drum.index = index
-                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release / 2, release_values)).value
+                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
                 #tuning logic
-                pseudorootkey = drum.rootkey - 21 - index + 60
+                pseudorootkey = drum.rootkey - 9 - index + 60
                 #print(f"root key: {pseudorootkey}")
                 oot_drum.tuningfloat = calculate_inst_tuning(pseudorootkey, 
                                        drum.tuning_semi,
@@ -1535,6 +1506,7 @@ def main():
         sys.exit(1)
 
     # Process the SF2 file
+    AudioHeap_InitAdsrDecayTable()
     process_sf2_file(input_file, output_file)
 
 if __name__ == "__main__":
