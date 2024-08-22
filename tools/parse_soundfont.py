@@ -48,7 +48,7 @@ def calc_chanbased_tuning(r, s, c, hR, sR):
 # If you want to drum to play at a higher pitch than its root key, then the root key will be greater than the key range.
 # If you want to drum to play at a lower pitch than its root key, then the root key will be less than than the key range.
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (hR / sR) # float * (sR / hR) would also work, just preference
     return keybased_tuning
 
 def find_closest_index(value, value_list):
