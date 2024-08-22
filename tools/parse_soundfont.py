@@ -1061,7 +1061,7 @@ class SF2File:
                         oot_inst.name = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_')}"
                         oot_inst.enum = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_').upper()}"
                         oot_inst.envelope = curInst.envelope_enum
-                        release = find_closest_index(curInst.release, release_values)
+                        release = find_closest_index(curInst.release / 2, release_values)
                         oot_inst.releaserate = ctypes.c_int8(release).value
 
                         # Process samples into OOT format with safety checks
@@ -1136,7 +1136,7 @@ class SF2File:
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
                 oot_drum.index = index
-                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
+                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release / 2, release_values)).value
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
                 #tuning logic
