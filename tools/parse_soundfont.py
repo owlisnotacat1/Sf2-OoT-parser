@@ -14,41 +14,34 @@ release_values = [0.0] * 256
 def calculate_decay(arg):
     return (256.0 * 0.001302) / arg
 
-# the "* 0.7" is because at lower amplitudes ingame the
-# audio just goes silent from what ive noticed 
-# so this is the closes that i could get to sf2
 def AudioHeap_InitAdsrDecayTable():
     release_values[0] = 0.0
 
     for i in range(1, 16):
-        release_values[i] = 1.0 / calculate_decay(60 * (23 - i)) / 60  * 0.7
+        release_values[i] = 1.0 / calculate_decay(60 * (23 - i)) / 60# * 0.7
     for i in range(16, 128):
-        release_values[i] = 1.0 / calculate_decay(4 * (143 - i)) / 60 * 0.7
+        release_values[i] = 1.0 / calculate_decay(4 * (143 - i)) / 60# * 0.7
     for i in range(128, 251):
-        release_values[i] = 1.0 / calculate_decay(251 - i) / 60 * 0.7
-    release_values[251] = 1.0 / calculate_decay(0.75) / 60 * 0.7
-    release_values[252] = 1.0 / calculate_decay(0.66) / 60 * 0.7
-    release_values[253] = 1.0 / calculate_decay(0.5) / 60 * 0.7
-    release_values[254] = 1.0 / calculate_decay(0.33) / 60 * 0.7
-    release_values[255] = 1.0 / calculate_decay(0.25) / 60 * 0.7
+        release_values[i] = 1.0 / calculate_decay(251 - i) / 60# * 0.7
+    release_values[251] = 1.0 / calculate_decay(0.75) / 60# * 0.7
+    release_values[252] = 1.0 / calculate_decay(0.66) / 60# * 0.7
+    release_values[253] = 1.0 / calculate_decay(0.5) / 60# * 0.7
+    release_values[254] = 1.0 / calculate_decay(0.33) / 60# * 0.7
+    release_values[255] = 1.0 / calculate_decay(0.25) / 60# * 0.7
 
-# Calculate tuning float for channel-based, or range-based, instruments (instruments)
-# Resulting final tuning value must result in "1 ÷ Float = Note Speed" (e.g. lower float = higher pitch)
+# Calculate tuning float for channel-based, or range-based, instruments (instruments).
+# For channel-based instruments, a lower tuning float value results in a higher pitch.
 def calc_chanbased_tuning(r, s, c, hR, sR):
-    chanbased_tuning = 2 ** ((60 - (r - s - (0.01 * c))) / 12) / (hR / sR) # float * (sR / hR) would also work, just preference
+    chanbased_tuning = 2 ** ((60 - (r - s - (0.01 * c))) / 12) / (hR / sR) # "Float * (sR / hR)" would also work, just preference.
     return chanbased_tuning
 
-# Calculate tuning float for key-based instruments (drums and sound effects)
-# Resulting final tuning value must result in "1 * Float = Note Speed" (e.g. higher float = higher pitch)
+# Calculate tuning float for key-based instruments (drums and sound effects).
+# For key-based instruments, a higher tuning float value results in a higher pitch.
 #
 # The tuning calculation already calculates as if the sample is assigned to 60. However, for SF2 parsing the distance from 60
-# must also be calculated and added as a secondary coarse tune: "Root Key - Key Range = Distance from 60"
-#
-# If you want the drum to play at the exact pitch of its root key, then the root key will be equal to the key range.
-# If you want to drum to play at a higher pitch than its root key, then the root key will be greater than the key range.
-# If you want to drum to play at a lower pitch than its root key, then the root key will be less than than the key range.
+# must also be calculated and added as a secondary coarse tune: "Key Range - Root Key = Distance from 60"
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (hR / sR) # float * (sR / hR) would also work, just preference
+    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (hR / sR) # "Float / (sR / hR)" would also work, just preference.
     return keybased_tuning
 
 def find_closest_index(value, value_list):
@@ -216,25 +209,25 @@ class Envelope:
             XmlTree.SubElement(script, "Point", {"Delay": str(envpoint.delay), "Value": str(envpoint.value)})
 
     def generate_envelope(self, sf2_attack, sf2_hold, sf2_decay, sf2_sustain):
-        if sf2_sustain == 100:
-            env_delay_1 = clamp(round(sf2_attack * (60 / updatesPerFrameScaled) * 2))
+        if sf2_sustain == 140:
+            env_delay_1 = clamp(round((sf2_attack * (180)) / updatesPerFrameScaled))
             env_point_1 = 32767
-            env_delay_2 = clamp(round(sf2_hold * (60 / updatesPerFrameScaled) * 2))
+            env_delay_2 = clamp(round((sf2_hold * (180)) / updatesPerFrameScaled))
             env_point_2 = 32767
-            env_delay_3 = clamp(round(sf2_decay * (60 / updatesPerFrameScaled) * 2))
+            env_delay_3 = clamp(round((sf2_decay * (180)) / updatesPerFrameScaled))
             env_point_3 = 1
             env_delay_4 = "ADSR_HANG"
             env_point_4 = 0
         else:
-            env_delay_1 = clamp(round(sf2_attack * (60 / updatesPerFrameScaled) * 2))
+            env_delay_1 = clamp(round((sf2_attack * (180)) / updatesPerFrameScaled))
             env_point_1 = 32767
 
             if sf2_sustain != 0:
-                env_delay_2 = clamp(round(sf2_hold * (60 / updatesPerFrameScaled) * 2))
+                env_delay_2 = clamp(round((sf2_hold * (180)) / updatesPerFrameScaled))
                 env_point_2 = 32767
-                env_delay_3 = clamp(round(sf2_decay * (60 / updatesPerFrameScaled) * 2))
+                env_delay_3 = clamp(round((sf2_decay * (180)) / updatesPerFrameScaled))
                 # Convert sustain dB value to linear and calculate the envelope point
-                env_point_3 = round(math.sqrt(db_to_linear(sf2_sustain / 2)) * 32767)
+                env_point_3 = round(math.sqrt(db_to_linear(sf2_sustain)) * 32767)
                 env_delay_4 = "ADSR_HANG"
                 env_point_4 = 0
             else:
@@ -789,7 +782,7 @@ class SF2File:
                     else:
                         if sample_entry is None:
                             sample_entry = PseudoInstrumentSampleEntry()
-                            # should only be called when global chunk is processed
+                            # should only be called when global chunk is processedp
 
                         if igen_entry.operator == 'keyrange':
                             if sample_entry.keyrangehigh != 127:
@@ -1038,7 +1031,7 @@ class SF2File:
                         oot_inst.enum = f"{presetheader.achPresetName.replace(' ', '_').replace('(', '_').replace(')', '_').upper()}"
                         oot_inst.envelope = curInst.envelope_enum
                         release = find_closest_index(curInst.release, release_values)
-                        oot_inst.releaserate = ctypes.c_uint8(release).value # release rates are UNSIGNED integers, not SIGNED integers owl...
+                        oot_inst.releaserate = ctypes.c_int8(release).value
 
                         # Process samples into OOT format with safety checks
                         if curInst.numsamples == 3:
@@ -1101,11 +1094,8 @@ class SF2File:
                     
     def process_percussion_set(self):
         for drum in self.processed_percussions:
-            # Is there a specific reason to subtract X from the range?
-            # The tuning calculation accepts MIDI note values by default, using "Zelda" note values
-            # or any other note value does nothing but add onto the calculation needlessly...
-            start = drum.lowrange #-9
-            end = drum.maxrange #-9
+            start = drum.lowrange
+            end = drum.maxrange
             index = start
             #print(f"sample: {drum.samplename}")
             while index <= end:
@@ -1114,20 +1104,16 @@ class SF2File:
                 oot_drum.samplename = f"{drum.samplename}.aifc"
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
-                oot_drum.index = index
-                oot_drum.release_index = ctypes.c_uint8(find_closest_index(drum.release, release_values)).value # release rates are UNSIGNED integers, not SIGNED integers owl...
+                oot_drum.index = index - 21 # Convert index to Z64 here instead of during float calculation.
+                oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
                 #tuning logic
-                # Key-based instruments always assume a root is 60, so just subtract the key range from the root
-                # to get the distance from 60 to act as a secondary coarse tune value...
-                # Unless there's some weird shenanigans that require the "Zelda" note values, this should result
-                # in the proper tuning float value being calculated...
+                # The tuning calculation already calculates as if the sample is assigned to 60. However, for SF2 parsing
+                # the distance from 60 must also be calculated and added as a secondary coarse tune.
                 #
-                # There is no reason to subtract "X" or to add 60, the key-based tuning calc doesn't inverse the
-                # resultant like the channel-based tuning calculation does... Adding 60 here doesn't cancel out
-                # the 60 in channel-based tuning either, because the 60 is being ADDED to the negative result...
-                pseudorootkey = drum.rootkey - index
+                # Calculate the distance from 60 below:
+                pseudorootkey = index - drum.rootkey # If index is key range, then change to "Key Range - Root Key" for calculation.
                 #print(f"root key: {pseudorootkey}")
                 oot_drum.tuningfloat = calc_keybased_tuning(pseudorootkey,
                                         drum.tuning_semi,
@@ -1141,7 +1127,7 @@ class SF2File:
 
     def process_oot_font(self):
         self.process_oot_envelopes()
-        self.deduplicate_envelopes()
+        #self.deduplicate_envelopes()
         self.process_oot_instruments()
         self.process_percussion_set()
 
