@@ -28,23 +28,24 @@ def AudioHeap_InitAdsrDecayTable():
     release_values[253] = 1.0 / calculate_decay(0.5) / 60# * 0.7
     release_values[254] = 1.0 / calculate_decay(0.33) / 60# * 0.7
     release_values[255] = 1.0 / calculate_decay(0.25) / 60# * 0.7
-    
 
+# Calculate tuning float for channel-based, or range-based, instruments (instruments).
+# For channel-based instruments, a lower tuning float value results in a higher pitch.
+def calc_chanbased_tuning(r, s, c, hR, sR):
+    chanbased_tuning = 2 ** ((60 - (r - s - (0.01 * c))) / 12) / (hR / sR) # "Float * (sR / hR)" would also work, just preference.
+    return chanbased_tuning
 
-def calculate_frequency(r, T, t):
-    exponent = (60 - (r - T - 0.01 * t)) / 24
-    f = 4 ** exponent
-    return f
-
-def calculate_inst_tuning(r, s, c, hR, sR):
-    exponent = calculate_frequency(r, s, c)
-    sample_rate_correction = sR / hR
-    tuning = exponent * sample_rate_correction
-    return tuning
+# Calculate tuning float for key-based instruments (drums and sound effects).
+# For key-based instruments, a higher tuning float value results in a higher pitch.
+#
+# The tuning calculation already calculates as if the sample is assigned to 60. However, for SF2 parsing the distance from 60
+# must also be calculated and added as a secondary coarse tune: "Key Range - Root Key = Distance from 60"
+def calc_keybased_tuning(r, s, c, hR, sR):
+    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (hR / sR) # "Float / (sR / hR)" would also work, just preference.
+    return keybased_tuning
 
 def find_closest_index(value, value_list):
     return min(range(len(value_list)), key=lambda i: abs(value_list[i] - value))
-
 
 def convert_pan_to_minus50_50_float(pan_value):
     # Clamp pan_value to the range -500 to 500
@@ -1035,7 +1036,7 @@ class SF2File:
                         # Process samples into OOT format with safety checks
                         if curInst.numsamples == 3:
                             oot_inst.lowkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.lowkey.tuning = calculate_inst_tuning(
+                            oot_inst.lowkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1043,7 +1044,7 @@ class SF2File:
                             )
 
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[1].rootkey,
                                 curInst.sample_entrys[1].tuning_semi,
                                 curInst.sample_entrys[1].tuning_cents,
@@ -1051,7 +1052,7 @@ class SF2File:
                             )
 
                             oot_inst.highKey.sample = f"{curInst.sample_entrys[2].samplename}.aifc"
-                            oot_inst.highKey.tuning = calculate_inst_tuning(
+                            oot_inst.highKey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[2].rootkey,
                                 curInst.sample_entrys[2].tuning_semi,
                                 curInst.sample_entrys[2].tuning_cents,
@@ -1063,7 +1064,7 @@ class SF2File:
 
                         elif curInst.numsamples == 2:
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1072,7 +1073,7 @@ class SF2File:
 
                             if len(curInst.sample_entrys) > 1:
                                 oot_inst.highKey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                                oot_inst.highKey.tuning = calculate_inst_tuning(
+                                oot_inst.highKey.tuning = calc_chanbased_tuning(
                                     curInst.sample_entrys[1].rootkey,
                                     curInst.sample_entrys[1].tuning_semi,
                                     curInst.sample_entrys[1].tuning_cents,
@@ -1082,7 +1083,7 @@ class SF2File:
 
                         elif curInst.numsamples == 1:
                             oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calculate_inst_tuning(
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
                                 curInst.sample_entrys[0].rootkey,
                                 curInst.sample_entrys[0].tuning_semi,
                                 curInst.sample_entrys[0].tuning_cents,
@@ -1093,8 +1094,8 @@ class SF2File:
                     
     def process_percussion_set(self):
         for drum in self.processed_percussions:
-            start = drum.lowrange - 21
-            end = drum.maxrange - 21
+            start = drum.lowrange
+            end = drum.maxrange
             index = start
             #print(f"sample: {drum.samplename}")
             while index <= end:
@@ -1103,15 +1104,19 @@ class SF2File:
                 oot_drum.samplename = f"{drum.samplename}.aifc"
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
-                oot_drum.index = index
+                oot_drum.index = index - 21 # Convert index to Z64 here instead of during float calculation.
                 oot_drum.release_index = ctypes.c_int8(find_closest_index(drum.release, release_values)).value
                 oot_drum.name = f"drum_{index}"
                 oot_drum.enum = f"DRUM_{index}"
                 #tuning logic
-                pseudorootkey = drum.rootkey - 21 - index + 60
+                # The tuning calculation already calculates as if the sample is assigned to 60. However, for SF2 parsing
+                # the distance from 60 must also be calculated and added as a secondary coarse tune.
+                #
+                # Calculate the distance from 60 below:
+                pseudorootkey = index - drum.rootkey # If index is key range, then change to "Key Range - Root Key" for calculation.
                 #print(f"root key: {pseudorootkey}")
-                oot_drum.tuningfloat = calculate_inst_tuning(pseudorootkey, 
-                                       drum.tuning_semi,
+                oot_drum.tuningfloat = calc_keybased_tuning(pseudorootkey,
+                                        drum.tuning_semi,
                                         drum.tuning_cents, 
                                         32000, drum.samplerate)
                 #print(f"tuning: {oot_drum.tuningfloat}")
