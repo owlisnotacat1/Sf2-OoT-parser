@@ -15,7 +15,7 @@ def calculate_decay(arg):
     return (256.0 * 0.001302) / arg
 
 def AudioHeap_InitAdsrDecayTable():
-    release_values[0] = 0.0
+    release_values[0] = 100.0
 
     for i in range(1, 16):
         release_values[i] = 1.0 / calculate_decay(60 * (23 - i)) / 60# * 0.7
