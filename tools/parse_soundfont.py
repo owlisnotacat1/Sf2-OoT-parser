@@ -41,7 +41,7 @@ def calc_chanbased_tuning(r, s, c, hR, sR):
 # The tuning calculation already calculates as if the sample is assigned to 60. However, for SF2 parsing the distance from 60
 # must also be calculated and added as a secondary coarse tune: "Key Range - Root Key = Distance from 60"
 def calc_keybased_tuning(r, s, c, hR, sR):
-    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (hR / sR) # "Float / (sR / hR)" would also work, just preference.
+    keybased_tuning = 2 ** ((r + s + (0.01 * c)) / 12) * (sR / hR)
     return keybased_tuning
 
 def find_closest_index(value, value_list):
