@@ -739,75 +739,67 @@ class SF2File:
             if not inst_entry.name.strip():
                 print(f"Warning: Empty or invalid instrument name at index {instindex}")
                 continue
-            
+
             # Create an Instrument object
             instrument = PseudoInstrument()
             instrument.name = inst_entry.name.strip()  # Store the instrument name
-    
+
             # Validate the instrument name
             if "pbag" in instrument.name.lower():
                 print(f"Error: Detected invalid instrument name resembling 'pbag': {instrument.name}")
                 continue
-            
+
             # Gather all ibag entries associated with this instrument
             ibag_start_index = inst_entry.wInstBagNdx
             # Use the next instrument's bag index or total number of ibags
             ibag_end_index = self.numibag if inst_entry.index + 1 >= len(self.insts) else self.insts[inst_entry.index + 1].wInstBagNdx
-    
+
             # Store global parameters
-            global_params = {
-                'attack': None,
-                'hold': None,
-                'decay': None,
-                'sustain': None,
-                'release': None
-            }
-    
-            has_global_zone = False  # Track if a global zone is detected
-    
+            global_params = {}
+
             for ibag_index in range(ibag_start_index, ibag_end_index):
                 if ibag_index >= len(self.ibags):
                     continue
-                
+
                 ibag_entry = self.ibags[ibag_index]
-    
+
                 # Gather all igen entries associated with this ibag
                 igen_start_index = ibag_entry.wInstGenNdx
                 igen_end_index = self.numigen if ibag_index + 1 >= len(self.ibags) else self.ibags[ibag_index + 1].wInstGenNdx
-    
+
+
                 sample_entry = None
                 is_global = False
-    
-                # Check if this is potentially a global zone
+
                 if ibag_index == ibag_start_index:
                     is_global = True
                     # Look ahead to check if any igen has a keyrange or sample index, which means it's not global
                     for igen_index in range(igen_start_index, igen_end_index):
                         if igen_index >= len(self.igens):
                             continue
-                        
+
                         igen_entry = self.igens[igen_index]
                         if igen_entry.operator in ['keyrange', 'sample index']:
                             is_global = False
                             break
-                        
-                if is_global:
-                    has_global_zone = True  # Confirmed as a global zone
-    
+
                 for igen_index in range(igen_start_index, igen_end_index):
                     if igen_index >= len(self.igens):
                         continue
-                    
+
                     igen_entry = self.igens[igen_index]
-    
+
                     if is_global:
                         # Store global parameters
                         global_params[igen_entry.operator] = igen_entry.amount
                     else:
                         if sample_entry is None:
                             sample_entry = PseudoInstrumentSampleEntry()
-    
+                            # should only be called when global chunk is processedp
+
                         if igen_entry.operator == 'keyrange':
+                            if sample_entry.keyrangehigh != 127:
+                                print("Key range high is not 127. This might indicate an issue.")
                             sample_entry.keyrangelow = igen_entry.amount & 0xFF
                             sample_entry.keyrangehigh = (igen_entry.amount >> 8) & 0xFF
                         elif igen_entry.operator == 'attack':
@@ -836,20 +828,20 @@ class SF2File:
                             instrument.numsamples += 1
                             instrument.sample_entrys.append(sample_entry)
                             sample_entry = PseudoInstrumentSampleEntry()
-    
+
                 # Apply global parameters if specific ones are missing
                 if sample_entry:
-                    if instrument.attack is None and global_params['attack'] is not None:
+                    if 'attack' not in globals() and 'attack' in global_params:
                         instrument.attack = convert_timecent_to_seconds(global_params['attack'])
-                    if instrument.hold is None and global_params['hold'] is not None:
+                    if 'hold' not in globals() and 'hold' in global_params:
                         instrument.hold = convert_timecent_to_seconds(global_params['hold'])
-                    if instrument.decay is None and global_params['decay'] is not None:
+                    if 'decay' not in globals() and 'decay' in global_params:
                         instrument.decay = convert_timecent_to_seconds(global_params['decay'])
-                    if instrument.sustain is None and global_params['sustain'] is not None:
+                    if 'sustain' not in globals() and 'sustain' in global_params:
                         instrument.sustain = global_params['sustain'] / 10
-                    if instrument.release is None and global_params['release'] is not None:
+                    if 'release' not in globals() and 'release' in global_params:
                         instrument.release = convert_timecent_to_seconds(global_params['release'])
-    
+
             # Add the processed instrument to the list
             self.processed_insts.append(instrument)
             instindex += 1
@@ -1148,7 +1140,7 @@ class SF2File:
 
     def process_oot_font(self):
         self.process_oot_envelopes()
-        #self.deduplicate_envelopes()
+        self.deduplicate_envelopes()
         self.process_oot_instruments()
         self.process_percussion_set()
 
