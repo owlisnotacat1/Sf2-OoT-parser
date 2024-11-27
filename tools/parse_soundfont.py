@@ -182,6 +182,7 @@ class shdr:
         self.chCorrection = 0  # Pitch correction in cents
         self.samplelink = 0
         self.sampletype = 0
+        self.index = None
 
 class RiffChunk:
     def __init__(self, name='', size=0, offset=0):
@@ -718,7 +719,7 @@ class SF2File:
                                         shdr_entry.samplelink,
                                         shdr_entry.sampletype
                                     ) = struct.unpack('<20sLLLLLBBHH', data)
-
+                                    shdr_entry.index = i
                                     shdr_entry.name = shdr_entry.name.decode('ascii').rstrip('\x00')
                                     self.shdrs.append(shdr_entry)
                                     self.numshdr += 1
@@ -731,7 +732,7 @@ class SF2File:
     print("Parsing completed.")
 
 
-    def process_instruments(self):
+    def process_instruments(self, name_mapping):
         # Iterate through each instrument
         instindex = 0
         for inst_entry in self.insts:
@@ -823,7 +824,7 @@ class SF2File:
                         elif igen_entry.operator == 'sample index':
                             sample_index = igen_entry.amount
                             if 0 <= sample_index < len(self.shdrs):
-                                sample_entry.samplename = self.shdrs[sample_index].name
+                                sample_entry.samplename = name_mapping[sample_index]
                                 sample_entry.samplerate = self.shdrs[sample_index].samplerate
                             instrument.numsamples += 1
                             instrument.sample_entrys.append(sample_entry)
@@ -846,7 +847,7 @@ class SF2File:
             self.processed_insts.append(instrument)
             instindex += 1
 
-    def process_drums(self):
+    def process_drums(self, name_mapping):
         if self.drumindex is not None:
             for inst_entry in self.insts:
                 if inst_entry.index == self.drumindex:
@@ -906,7 +907,7 @@ class SF2File:
                                 elif igen_entry.operator == 'sample index':
                                     sample_index = igen_entry.amount
                                     if 0 <= sample_index < len(self.shdrs):
-                                        drum.samplename = self.shdrs[sample_index].name
+                                        drum.samplename = name_mapping[sample_index]
                                         drum.samplerate = self.shdrs[sample_index].samplerate
 
                         # If a drum entry was created and processed, append it to the list
@@ -1048,63 +1049,45 @@ class SF2File:
 
                         # Process samples into OOT format with safety checks
                         if curInst.numsamples == 3:
-                            oot_inst.lowkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.lowkey.tuning = calc_chanbased_tuning(
-                                curInst.sample_entrys[0].rootkey,
-                                curInst.sample_entrys[0].tuning_semi,
-                                curInst.sample_entrys[0].tuning_cents,
-                                32000, curInst.sample_entrys[0].samplerate
-                            )
+                            sample_name_1 = curInst.sample_entrys[0].samplename
+                            if isinstance(sample_name_1, list):
+                                sample_name_1 = sample_name_1[0]  # Use the first item if it's a list
+                            oot_inst.lowkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
 
-                            oot_inst.mediumkey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
-                                curInst.sample_entrys[1].rootkey,
-                                curInst.sample_entrys[1].tuning_semi,
-                                curInst.sample_entrys[1].tuning_cents,
-                                32000, curInst.sample_entrys[1].samplerate
-                            )
+                            sample_name_2 = curInst.sample_entrys[1].samplename
+                            if isinstance(sample_name_2, list):
+                                sample_name_2 = sample_name_2[0]
+                            oot_inst.mediumkey.sample = sample_name_2.strip("[]").replace("'", "") + ".aifc"
 
-                            oot_inst.highKey.sample = f"{curInst.sample_entrys[2].samplename}.aifc"
-                            oot_inst.highKey.tuning = calc_chanbased_tuning(
-                                curInst.sample_entrys[2].rootkey,
-                                curInst.sample_entrys[2].tuning_semi,
-                                curInst.sample_entrys[2].tuning_cents,
-                                32000, curInst.sample_entrys[2].samplerate
-                            )
+                            sample_name_3 = curInst.sample_entrys[2].samplename
+                            if isinstance(sample_name_3, list):
+                                sample_name_3 = sample_name_3[0]
+                            oot_inst.highKey.sample = sample_name_3.strip("[]").replace("'", "") + ".aifc"
 
                             oot_inst.minNote = fromRawValueToNoteName(curInst.sample_entrys[1].keyrangehigh)
                             oot_inst.maxNote = fromRawValueToNoteName(curInst.sample_entrys[1].keyrangelow)
 
                         elif curInst.numsamples == 2:
-                            oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
-                                curInst.sample_entrys[0].rootkey,
-                                curInst.sample_entrys[0].tuning_semi,
-                                curInst.sample_entrys[0].tuning_cents,
-                                32000, curInst.sample_entrys[0].samplerate
-                            )
+                            sample_name_1 = curInst.sample_entrys[0].samplename
+                            if isinstance(sample_name_1, list):
+                                sample_name_1 = sample_name_1[0]
+                            oot_inst.mediumkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
 
                             if len(curInst.sample_entrys) > 1:
-                                oot_inst.highKey.sample = f"{curInst.sample_entrys[1].samplename}.aifc"
-                                oot_inst.highKey.tuning = calc_chanbased_tuning(
-                                    curInst.sample_entrys[1].rootkey,
-                                    curInst.sample_entrys[1].tuning_semi,
-                                    curInst.sample_entrys[1].tuning_cents,
-                                    32000, curInst.sample_entrys[1].samplerate
-                                )
+                                sample_name_2 = curInst.sample_entrys[1].samplename
+                                if isinstance(sample_name_2, list):
+                                    sample_name_2 = sample_name_2[0]
+                                oot_inst.highKey.sample = sample_name_2.strip("[]").replace("'", "") + ".aifc"
                                 oot_inst.minNote = fromRawValueToNoteName(curInst.sample_entrys[0].keyrangehigh)
 
                         elif curInst.numsamples == 1:
-                            oot_inst.mediumkey.sample = f"{curInst.sample_entrys[0].samplename}.aifc"
-                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
-                                curInst.sample_entrys[0].rootkey,
-                                curInst.sample_entrys[0].tuning_semi,
-                                curInst.sample_entrys[0].tuning_cents,
-                                32000, curInst.sample_entrys[0].samplerate
-                            )
+                            sample_name_1 = curInst.sample_entrys[0].samplename
+                            if isinstance(sample_name_1, list):
+                                sample_name_1 = sample_name_1[0]
+                            oot_inst.mediumkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
 
                         self.ootfont.instruments.append(oot_inst)
-                    
+
     def process_percussion_set(self):
         for drum in self.processed_percussions:
             start = drum.lowrange
@@ -1114,7 +1097,11 @@ class SF2File:
             while index <= end:
                 #process drums for current sample in inst
                 oot_drum = OotDrum()
-                oot_drum.samplename = f"{drum.samplename}.aifc"
+                sample_name = drum.samplename
+                if isinstance(sample_name, list):
+                    sample_name = sample_name[0]
+                oot_drum.samplename = sample_name.strip("[]").replace("'", "") + ".aifc"
+                #oot_drum.samplename = f"{drum.samplename}.aifc"
                 oot_drum.envelope = drum.envelope_enum
                 oot_drum.pan = max(0, min(64 + round(1.27 * drum.pan), 127))
                 oot_drum.index = index - 21 # Convert index to Z64 here instead of during float calculation.
@@ -1211,16 +1198,16 @@ class SF2File:
         # Ensure the output directory exists
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-
+    
         sample_name_count = {}  # Dictionary to track sample name occurrences
-        name_mapping = {}  # Map original names to unique names
-
+        name_mapping = [[] for _ in range(self.numshdr + 1)]  # Map original names to unique names, initialized as lists
+    
         # Open the SF2 file to read sample data
         with open(self.filepath, 'rb') as sf2_file:
             for shdr_entry in self.shdrs:
                 if shdr_entry.name == "EOS":  # Skip the terminal "EOS" entry
                     continue
-
+                
                 # Generate a unique sample name
                 base_name = shdr_entry.name
                 if base_name in sample_name_count:
@@ -1229,23 +1216,28 @@ class SF2File:
                 else:
                     sample_name_count[base_name] = 0
                     unique_name = base_name
-
-                # Store the mapping from the original name to the unique name
-                name_mapping[shdr_entry.name] = unique_name
-
+    
+                # Ensure name_mapping[shdr_entry.index] is a list (it is initialized as a list already)
+                if isinstance(name_mapping[shdr_entry.index], list):
+                    name_mapping[shdr_entry.index].append(unique_name)
+                else:
+                    name_mapping[shdr_entry.index] = [unique_name]
+    
+                print(f"Added {unique_name} to name_mapping[{shdr_entry.index}]")
+    
                 # Calculate the size of the sample
                 sample_size = (shdr_entry.end - shdr_entry.start) * 2  # Since samples are 16-bit (2 bytes)
-
+    
                 # Seek to the start of the sample data
                 sf2_file.seek(shdr_entry.start * 2)
-
+    
                 # Read the sample data
                 sample_data = sf2_file.read(sample_size)
-
+    
                 # Calculate loop points
                 loop_start = shdr_entry.startloop - shdr_entry.start
                 loop_end = shdr_entry.endloop - shdr_entry.start
-
+    
                 # Validate loop points
                 if loop_start <= 1 or loop_end < 0 or loop_start >= loop_end or loop_start == loop_end:
                     loop_start = None
@@ -1253,15 +1245,16 @@ class SF2File:
                 elif loop_start == 0 and loop_end == shdr_entry.end - shdr_entry.start:
                     loop_start = None
                     loop_end = None
-
+    
                 # Convert the sample data into WAV format with loop points
                 wav_file_path = os.path.join(output_dir, f"{unique_name}.wav")
                 self.write_wav_file(wav_file_path, sample_data, shdr_entry.samplerate,
                                     loop_start, loop_end)
-
+    
                 print(f"Extracted: {wav_file_path}")
-
+    
         return name_mapping  # Return the mapping to be used in instruments and drums
+
 
     def update_sample_names_in_instruments_and_drums(self, name_mapping):
         # Update sample names in instruments
@@ -1381,24 +1374,36 @@ class SF2File:
     def delete_unassociated_samples(self, output_dir):
         # Gather all sample names associated with instruments and drums
         associated_samples = set()
-
+    
         # Collect samples from instruments
         for instrument in self.processed_insts:
             for sample_entry in instrument.sample_entrys:
                 if sample_entry.samplename:
-                    associated_samples.add(sample_entry.samplename)
-
+                    if isinstance(sample_entry.samplename, list):
+                        # If samplename is a list, add each name
+                        associated_samples.update(sample_entry.samplename)
+                    else:
+                        # Otherwise, add the single name
+                        associated_samples.add(sample_entry.samplename)
+    
         # Collect samples from drums
         for drum in self.processed_percussions:
             if drum.samplename:
-                associated_samples.add(drum.samplename)
-
+                if isinstance(drum.samplename, list):
+                    # If samplename is a list, add each name
+                    associated_samples.update(drum.samplename)
+                else:
+                    # Otherwise, add the single name
+                    associated_samples.add(drum.samplename)
+    
+        print(f"Associated samples: {associated_samples}")
+    
         # List all files in the output directory
         all_files = os.listdir(output_dir)
-
+    
         # Delete files that are not associated with any instrument or drum
         for file_name in all_files:
-            if file_name.endswith(".wav"):  # Now checking for .wav files
+            if file_name.endswith(".wav"):  # Check only .wav files
                 sample_name = file_name.rsplit('.', 1)[0]  # Remove the file extension
                 if sample_name not in associated_samples:
                     file_path = os.path.join(output_dir, file_name)
@@ -1488,17 +1493,17 @@ def process_sf2_file(sf2_file, output_file):
     sf2 = SF2File(sf2_file)
     sf2.parse()
 
-    # Process instruments and drums
-    sf2.process_instruments()
-    drumInstId = sf2.get_instrument_index_for_drum()
-    sf2.process_drums()
-
     # Extract samples and get the mapping of original to unique names
     output_dir = os.path.join(os.path.dirname(sf2_file), "Samples")
     name_mapping = sf2.extract_samples(output_dir)
-    
+
+    # Process instruments and drums
+    sf2.process_instruments(name_mapping)
+    drumInstId = sf2.get_instrument_index_for_drum()
+    sf2.process_drums(name_mapping)
+
     # Update instruments and drums with unique sample names
-    sf2.update_sample_names_in_instruments_and_drums(name_mapping)
+    #sf2.update_sample_names_in_instruments_and_drums(name_mapping)
     
     # Process OOT font and generate XML
     sf2.process_oot_font()
