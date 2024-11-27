@@ -1001,40 +1001,40 @@ class SF2File:
 
     def process_oot_instruments(self):
         processed_indices = set()  # Keep track of processed instrument indices
-
+    
         for presetheader in self.presetheaders:
             instIndex = None
             if presetheader.wPreset != 127:
                 tmp_pbag_start = presetheader.wPresetBagNdx
-
+    
                 next_preset_index = self.presetheaders.index(presetheader) + 1
                 if next_preset_index < len(self.presetheaders):
                     tmp_pbag_end = self.presetheaders[next_preset_index].wPresetBagNdx
                 else:
                     tmp_pbag_end = len(self.pbags)
-
+    
                 for pbag_index in range(tmp_pbag_start, tmp_pbag_end):
                     if pbag_index >= len(self.pbags):
                         continue
-
+                    
                     pbag_entry = self.pbags[pbag_index]
                     tmp_pgen_start = pbag_entry.wGenNdx
                     tmp_pgen_end = len(self.pgens)
-
+    
                     if pbag_index + 1 < len(self.pbags):
                         tmp_pgen_end = self.pbags[pbag_index + 1].wGenNdx
-
+    
                     if tmp_pgen_start >= tmp_pgen_end:
                         continue  # Skip if start index is not valid
-
+                    
                     for pgen_index in range(tmp_pgen_start, tmp_pgen_end):
                         pgen_entry = self.pgens[pgen_index]
-
+    
                         # Process the pgen entry based on its operator
                         if pgen_entry.operator == 'instrument index':
                             instIndex = pgen_entry.amount
                             break  # We found the instrument index, no need to continue in this pbag
-
+                        
                 if instIndex is not None:
                     if instIndex != self.drumindex and instIndex not in processed_indices:
                         processed_indices.add(instIndex)
@@ -1046,47 +1046,90 @@ class SF2File:
                         oot_inst.envelope = curInst.envelope_enum
                         release = find_closest_index(curInst.release, release_values)
                         oot_inst.releaserate = ctypes.c_int8(release).value
-
+    
                         # Process samples into OOT format with safety checks
                         if curInst.numsamples == 3:
+                            # Sample 1
                             sample_name_1 = curInst.sample_entrys[0].samplename
                             if isinstance(sample_name_1, list):
                                 sample_name_1 = sample_name_1[0]  # Use the first item if it's a list
                             oot_inst.lowkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
-
+                            oot_inst.lowkey.tuning = calc_chanbased_tuning(
+                                curInst.sample_entrys[0].rootkey,
+                                curInst.sample_entrys[0].tuning_semi,
+                                curInst.sample_entrys[0].tuning_cents,
+                                32000, curInst.sample_entrys[0].samplerate
+                            )
+    
+                            # Sample 2
                             sample_name_2 = curInst.sample_entrys[1].samplename
                             if isinstance(sample_name_2, list):
                                 sample_name_2 = sample_name_2[0]
                             oot_inst.mediumkey.sample = sample_name_2.strip("[]").replace("'", "") + ".aifc"
-
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
+                                curInst.sample_entrys[1].rootkey,
+                                curInst.sample_entrys[1].tuning_semi,
+                                curInst.sample_entrys[1].tuning_cents,
+                                32000, curInst.sample_entrys[1].samplerate
+                            )
+    
+                            # Sample 3
                             sample_name_3 = curInst.sample_entrys[2].samplename
                             if isinstance(sample_name_3, list):
                                 sample_name_3 = sample_name_3[0]
                             oot_inst.highKey.sample = sample_name_3.strip("[]").replace("'", "") + ".aifc"
-
+                            oot_inst.highKey.tuning = calc_chanbased_tuning(
+                                curInst.sample_entrys[2].rootkey,
+                                curInst.sample_entrys[2].tuning_semi,
+                                curInst.sample_entrys[2].tuning_cents,
+                                32000, curInst.sample_entrys[2].samplerate
+                            )
+    
                             oot_inst.minNote = fromRawValueToNoteName(curInst.sample_entrys[1].keyrangehigh)
                             oot_inst.maxNote = fromRawValueToNoteName(curInst.sample_entrys[1].keyrangelow)
-
+    
                         elif curInst.numsamples == 2:
+                            # Sample 1
                             sample_name_1 = curInst.sample_entrys[0].samplename
                             if isinstance(sample_name_1, list):
                                 sample_name_1 = sample_name_1[0]
                             oot_inst.mediumkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
-
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
+                                curInst.sample_entrys[0].rootkey,
+                                curInst.sample_entrys[0].tuning_semi,
+                                curInst.sample_entrys[0].tuning_cents,
+                                32000, curInst.sample_entrys[0].samplerate
+                            )
+    
                             if len(curInst.sample_entrys) > 1:
+                                # Sample 2
                                 sample_name_2 = curInst.sample_entrys[1].samplename
                                 if isinstance(sample_name_2, list):
                                     sample_name_2 = sample_name_2[0]
                                 oot_inst.highKey.sample = sample_name_2.strip("[]").replace("'", "") + ".aifc"
+                                oot_inst.highKey.tuning = calc_chanbased_tuning(
+                                    curInst.sample_entrys[1].rootkey,
+                                    curInst.sample_entrys[1].tuning_semi,
+                                    curInst.sample_entrys[1].tuning_cents,
+                                    32000, curInst.sample_entrys[1].samplerate
+                                )
                                 oot_inst.minNote = fromRawValueToNoteName(curInst.sample_entrys[0].keyrangehigh)
-
+    
                         elif curInst.numsamples == 1:
+                            # Sample 1
                             sample_name_1 = curInst.sample_entrys[0].samplename
                             if isinstance(sample_name_1, list):
                                 sample_name_1 = sample_name_1[0]
                             oot_inst.mediumkey.sample = sample_name_1.strip("[]").replace("'", "") + ".aifc"
-
+                            oot_inst.mediumkey.tuning = calc_chanbased_tuning(
+                                curInst.sample_entrys[0].rootkey,
+                                curInst.sample_entrys[0].tuning_semi,
+                                curInst.sample_entrys[0].tuning_cents,
+                                32000, curInst.sample_entrys[0].samplerate
+                            )
+    
                         self.ootfont.instruments.append(oot_inst)
+
 
     def process_percussion_set(self):
         for drum in self.processed_percussions:
