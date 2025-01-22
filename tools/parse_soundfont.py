@@ -455,6 +455,7 @@ class SF2File:
         self.processed_percussions = []
         self.numdrums = 0
         self.ootfont = OotFont()
+        self.smpl_offset = 0
 
         # Mapping for generator operator indices
         self.generator_mapping = {
@@ -568,6 +569,7 @@ class SF2File:
                     while current_offset < end_offset:
                         subchunk_lvl1 = self.riff_get_subchunk(current_offset)
                         subchunk.subchunks.append(subchunk_lvl1)
+                        print(f"subchunk {subchunk_lvl1.name}, at {subchunk_lvl1.offset}")
                         
                         # Update offset to the next subchunk
                         current_offset += subchunk_lvl1.size + 8
@@ -729,6 +731,17 @@ class SF2File:
                                     i += 1
                         #for igen_entry in self.igens:
                         #    print(f"index: {igen_entry.index}, operator: {igen_entry.operator}")
+                    elif subchunk.type == 'sdta':
+                        print(f"found sdta")
+                        # get offset in file of sdata smpl chunk
+                        for subchunk_lvl1 in subchunk.subchunks:
+                            if subchunk_lvl1.name == 'smpl':
+                                print("found smpl")
+                                self.smpl_offset = subchunk_lvl1.offset + 8
+                            
+
+
+
     print("Parsing completed.")
 
 
@@ -1272,7 +1285,7 @@ class SF2File:
                 sample_size = (shdr_entry.end - shdr_entry.start) * 2  # Since samples are 16-bit (2 bytes)
     
                 # Seek to the start of the sample data
-                sf2_file.seek(shdr_entry.start * 2)
+                sf2_file.seek((shdr_entry.start * 2) + self.smpl_offset)
     
                 # Read the sample data
                 sample_data = sf2_file.read(sample_size)
